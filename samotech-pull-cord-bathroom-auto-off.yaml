@@ -1,0 +1,134 @@
+blueprint:
+  name: Samotech Pull Cord Bathroom Auto-Off (Zigbee2MQTT)
+  description: |
+    Automatically turn off a bathroom light controlled by the Samotech Zigbee Pull Cord Dimmer after a configurable period. Designed for UK bathroom installations where the light is sometimes left on by mistake.
+
+    The Samotech Zigbee Pull Cord Dimmer is the world's only smart pull cord dimmer in production - no other manufacturer makes one. This blueprint adds the matching software automation layer.
+
+    Behaviour:
+      - When the cord turns the light on, the auto-off timer starts
+      - If the cord is pulled again to turn the light off manually, the timer cancels
+      - When the timer expires, the light turns off automatically
+      - Optional brief dim warning before the auto-off, so the occupant can pull the cord to reset the timer
+      - Mode is 'restart' so a fresh cord pull always restarts the timer cleanly
+
+    Typical use cases:
+      - UK bathrooms where the pull cord is the primary light control
+      - Child or guest bathrooms where lights are routinely forgotten
+      - Loft bathrooms and en-suites where the light is out of normal traffic
+
+    Requirements:
+      - Samotech Zigbee Pull Cord Dimmer paired via Zigbee2MQTT
+      - The dimmer's light entity in Home Assistant
+
+    Source: https://www.samotech.co.uk/guides/home-assistant-blueprints/samotech-pull-cord-bathroom-auto-off/
+
+  domain: automation
+  source_url: https://www.samotech.co.uk/guides/home-assistant-blueprints/samotech-pull-cord-bathroom-auto-off/
+
+  input:
+    pull_cord_light:
+      name: Bathroom Light (Pull Cord Dimmer)
+      description: The Samotech Zigbee pull cord dimmer light entity
+      selector:
+        entity:
+          domain: light
+
+    auto_off_minutes:
+      name: Auto-off after
+      description: Minutes the light is on before it turns off automatically
+      default: 30
+      selector:
+        number:
+          min: 5
+          max: 240
+          step: 5
+          unit_of_measurement: minutes
+          mode: slider
+
+    warn_before_off:
+      name: Warn before auto-off
+      description: Briefly dim the light before turning off, so the occupant can pull the cord to extend the timer
+      default: true
+      selector:
+        boolean:
+
+    warn_seconds:
+      name: Warning duration
+      description: How many seconds to dim the light before turning it off
+      default: 15
+      selector:
+        number:
+          min: 5
+          max: 60
+          step: 5
+          unit_of_measurement: seconds
+          mode: slider
+
+    warn_brightness_pct:
+      name: Warning brightness
+      description: Brightness percentage during the warning dim
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 80
+          step: 1
+          unit_of_measurement: '%'
+          mode: slider
+
+mode: restart
+max_exceeded: silent
+
+trigger:
+  - platform: state
+    entity_id: !input pull_cord_light
+    to: 'on'
+
+variables:
+  light_entity: !input pull_cord_light
+  warn_enabled: !input warn_before_off
+  warn_secs: !input warn_seconds
+  warn_pct: !input warn_brightness_pct
+  off_minutes: !input auto_off_minutes
+  # Total seconds before action, minus warning duration if enabled
+  wait_seconds: >-
+    {% if warn_enabled %}
+      {{ (off_minutes | int * 60) - (warn_secs | int) }}
+    {% else %}
+      {{ off_minutes | int * 60 }}
+    {% endif %}
+
+action:
+  # Wait the configured period (minus warning duration if warning is enabled)
+  - delay:
+      seconds: "{{ wait_seconds | int }}"
+
+  # If warning is enabled, dim briefly first
+  - if:
+      - "{{ warn_enabled }}"
+      - condition: state
+        entity_id: !input pull_cord_light
+        state: 'on'
+    then:
+      - service: light.turn_on
+        target:
+          entity_id: !input pull_cord_light
+        data:
+          brightness_pct: "{{ warn_pct }}"
+          transition: 1
+      - delay:
+          seconds: "{{ warn_secs }}"
+
+  # Final check - only turn off if the light is still on
+  # (in restart mode, any cord pull during the delay restarts the automation)
+  - if:
+      - condition: state
+        entity_id: !input pull_cord_light
+        state: 'on'
+    then:
+      - service: light.turn_off
+        target:
+          entity_id: !input pull_cord_light
+        data:
+          transition: 2
