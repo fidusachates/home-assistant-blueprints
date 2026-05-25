@@ -1,5 +1,5 @@
 blueprint:
-  name: Samotech Pull Cord Bathroom Auto-Off (Zigbee2MQTT)
+  name: Samotech Pull Cord Bathroom Auto-Off
   description: |
     Automatically turn off a bathroom light controlled by the Samotech Zigbee Pull Cord Dimmer after a configurable period. Designed for UK bathroom installations where the light is sometimes left on by mistake.
 
@@ -18,7 +18,7 @@ blueprint:
       - Loft bathrooms and en-suites where the light is out of normal traffic
 
     Requirements:
-      - Samotech Zigbee Pull Cord Dimmer paired via Zigbee2MQTT
+      - Samotech Zigbee Pull Cord Dimmer paired via ZHA or Zigbee2MQTT
       - The dimmer's light entity in Home Assistant
 
     Source: https://www.samotech.co.uk/guides/home-assistant-blueprints/samotech-pull-cord-bathroom-auto-off/
