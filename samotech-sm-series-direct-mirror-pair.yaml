@@ -23,6 +23,8 @@ blueprint:
       - SM323 (Office) <-> SM323 (Samotech SM323, newly paired) in live HA via ZHA
       - Confirmed: push, rotation, and brightness changes mirror in both directions with no visible lag or flicker
 
+    Compatible with both ZHA and Zigbee2MQTT. The blueprint uses standard HA state triggers and light services, which behave identically across both integrations. The blueprint is integration-agnostic so it does not matter whether the Samotech dimmers are paired via ZHA or Z2M (or even a mix of both).
+
     This is the 2-device specialisation of the Samotech SM-Series Linked Sync Group blueprint, optimised for the most common UK retrofit case: pairing exactly two dimmers as a virtual 2-way circuit.
 
     Source: https://www.samotech.co.uk/samotech-direct-mirror-pair-home-assistant-blueprint/
@@ -37,7 +39,6 @@ blueprint:
       selector:
         entity:
           domain: light
-          integration: zha
 
     dimmer_b:
       name: Second dimmer
@@ -45,7 +46,6 @@ blueprint:
       selector:
         entity:
           domain: light
-          integration: zha
 
     transition:
       name: Mirror response speed
