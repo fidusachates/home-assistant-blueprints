@@ -1,0 +1,126 @@
+blueprint:
+  name: Samotech SM-Series Linked Sync Group
+  description: |
+    Sync up to five Samotech SM-series Zigbee devices as a single linked group. When any device in the group is operated at the wall (or from Home Assistant), the others follow.
+
+    Designed for UK retrofit installations where adding traveler wire for hardware 2-way (or n-way) switching isn't practical. Works across any combination of Samotech dimmer and switch products:
+
+      - SM323 Zigbee Rotary Dimmer (wall, no neutral, dimmable)
+      - SM325-ZG Zigbee Dimmer (wall, dimmable)
+      - SM308-S Zigbee Switch Module (inline, on/off)
+      - SM309-S Zigbee Dimmer Module (inline, no neutral, dimmable)
+      - Any other ZHA-integrated Samotech dimmer or switch product
+
+    Devices in the group don't need to be the same type. A dimmer paired with an on/off switch module will sync state (on/off); brightness mirroring is applied only to devices that support it.
+
+    Typical use cases:
+      - Hallways and landings with switch positions at either end
+      - Staircases (top and bottom)
+      - Open-plan kitchen / dining / living installations
+      - Two-circuit rooms where both lights should track each other
+      - Annexes, extensions, garage workshops
+
+    Behaviour:
+      - State changes (on/off) mirror across all devices in the group
+      - Brightness changes mirror across dimmer-capable devices in the group
+      - Loop prevention: only reacts to user-initiated changes (at the wall or from a UI/voice command). Automation-driven changes elsewhere do not trigger the sync.
+      - Configurable transition time keeps the mirroring visually smooth
+
+    Tested working against:
+      - SM323 (Office) <-> SM325-ZG <-> SM308-S (Office Side) in live HA via ZHA
+
+    Source: https://www.samotech.co.uk/guides/home-assistant-blueprints/sm-series-linked-sync-group/
+
+  domain: automation
+  source_url: https://www.samotech.co.uk/guides/home-assistant-blueprints/sm-series-linked-sync-group/
+
+  input:
+    sync_group:
+      name: Lights in the sync group
+      description: Two to five Samotech devices to sync together. Mix of dimmers and switches is fine.
+      selector:
+        entity:
+          domain: light
+          multiple: true
+
+    sync_brightness:
+      name: Sync brightness across dimmers
+      description: Also mirror brightness changes between dimmer-capable devices. Switches stay on/off only.
+      default: true
+      selector:
+        boolean:
+
+    transition:
+      name: Transition time
+      description: How smoothly to mirror state and brightness changes (in seconds)
+      default: 0.5
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 0.1
+          unit_of_measurement: seconds
+          mode: slider
+
+mode: parallel
+max: 5
+
+trigger:
+  - platform: state
+    entity_id: !input sync_group
+
+variables:
+  sync_group: !input sync_group
+  brightness_sync: !input sync_brightness
+  transition_time: !input transition
+  source_entity: "{{ trigger.entity_id }}"
+  target_entities: "{{ sync_group | reject('eq', source_entity) | list }}"
+  new_state: "{{ trigger.to_state.state }}"
+  new_brightness: "{{ trigger.to_state.attributes.brightness | default(255) }}"
+
+condition:
+  # Loop prevention: only react to user-initiated changes (wall interaction or direct UI).
+  # Automation-driven changes (including this automation's own mirror calls) have a parent_id set.
+  - "{{ trigger.to_state.context.parent_id is none }}"
+  # Skip null/unknown source states (e.g. initial HA startup)
+  - "{{ trigger.from_state is not none }}"
+  # Only act on meaningful changes - state OR brightness
+  - >-
+    {{ new_state != trigger.from_state.state
+       or (brightness_sync
+           and new_state == 'on'
+           and (new_brightness | int) != (trigger.from_state.attributes.brightness | default(0) | int)) }}
+
+action:
+  - choose:
+      # Source went OFF -> turn all targets off
+      - conditions: "{{ new_state == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: "{{ target_entities }}"
+            data:
+              transition: "{{ transition_time }}"
+
+      # Source went ON with brightness sync enabled
+      - conditions:
+          - "{{ new_state == 'on' }}"
+          - "{{ brightness_sync }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ target_entities }}"
+            data:
+              brightness: "{{ new_brightness }}"
+              transition: "{{ transition_time }}"
+
+      # Source went ON with brightness sync disabled
+      - conditions:
+          - "{{ new_state == 'on' }}"
+          - "{{ not brightness_sync }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ target_entities }}"
+            data:
+              transition: "{{ transition_time }}"
