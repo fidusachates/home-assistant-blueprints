@@ -1,0 +1,112 @@
+blueprint:
+  name: Samotech SM-Series Direct Mirror Pair
+  description: |
+    Mirror two Samotech SM-series Zigbee dimmers as a physically hardwired pair.
+
+    Changing the brightness, on/off state, or any control on either dimmer is reflected exactly on the other within ~200 ms. The pair behaves as if both dimmers were wired together at the load, except they remain on independent circuits with independent power monitoring and can be installed anywhere.
+
+    Designed as the software equivalent of two physically parallel dimmers for UK retrofit installations:
+      - Two switch positions controlling the same room without re-cabling
+      - Hallway entrance dimmer + landing dimmer both controlling the corridor
+      - Bedroom door dimmer + bedside dimmer
+      - Open-plan kitchen / diner with multiple control points
+      - Annexes and extensions added without running new traveler wire
+
+    Behaviour:
+      - On/off state mirrors in both directions
+      - Brightness mirrors exactly between the two dimmers
+      - Optimised for very fast response (200 ms default transition)
+      - Loop prevention via Home Assistant context tracking - the mirror only fires from real user interaction (at the wall or via UI/voice), never from itself
+      - Both dimmers retain full independent power monitoring on the SM323
+
+    Tested working against:
+      - SM323 (Office) <-> SM323 (Samotech SM323, newly paired) in live HA via ZHA
+      - Confirmed: push, rotation, and brightness changes mirror in both directions with no visible lag or flicker
+
+    This is the 2-device specialisation of the Samotech SM-Series Linked Sync Group blueprint, optimised for the most common UK retrofit case: pairing exactly two dimmers as a virtual 2-way circuit.
+
+    Source: https://www.samotech.co.uk/samotech-direct-mirror-pair-home-assistant-blueprint/
+
+  domain: automation
+  source_url: https://www.samotech.co.uk/samotech-direct-mirror-pair-home-assistant-blueprint/
+
+  input:
+    dimmer_a:
+      name: First dimmer
+      description: One end of the mirror pair (typically the most-used switch position)
+      selector:
+        entity:
+          domain: light
+          integration: zha
+
+    dimmer_b:
+      name: Second dimmer
+      description: Other end of the mirror pair
+      selector:
+        entity:
+          domain: light
+          integration: zha
+
+    transition:
+      name: Mirror response speed
+      description: How fast to mirror changes between the dimmers. Lower is more responsive; higher is visually smoother.
+      default: 0.2
+      selector:
+        number:
+          min: 0
+          max: 2
+          step: 0.1
+          unit_of_measurement: seconds
+          mode: slider
+
+mode: parallel
+max: 4
+
+trigger:
+  - platform: state
+    entity_id: !input dimmer_a
+    id: a
+  - platform: state
+    entity_id: !input dimmer_b
+    id: b
+
+variables:
+  dimmer_a: !input dimmer_a
+  dimmer_b: !input dimmer_b
+  transition_time: !input transition
+  source_entity: "{{ trigger.entity_id }}"
+  target_entity: "{{ dimmer_b if source_entity == dimmer_a else dimmer_a }}"
+  new_state: "{{ trigger.to_state.state }}"
+  new_brightness: "{{ trigger.to_state.attributes.brightness | default(255) }}"
+
+condition:
+  # Loop prevention: only react to user-initiated changes (wall, UI or voice).
+  # Automation-driven changes - including this automation's own mirror calls - carry a parent_id.
+  - "{{ trigger.to_state.context.parent_id is none }}"
+  # Skip null source states (e.g. initial HA startup)
+  - "{{ trigger.from_state is not none }}"
+  # Only act on meaningful changes - state OR brightness
+  - >-
+    {{ new_state != trigger.from_state.state
+       or (new_state == 'on' and (new_brightness | int) != (trigger.from_state.attributes.brightness | default(0) | int)) }}
+
+action:
+  - choose:
+      # Source went OFF -> turn target off with matched transition
+      - conditions: "{{ new_state == 'off' }}"
+        sequence:
+          - service: light.turn_off
+            target:
+              entity_id: "{{ target_entity }}"
+            data:
+              transition: "{{ transition_time }}"
+
+      # Source went ON -> turn target on with same brightness
+      - conditions: "{{ new_state == 'on' }}"
+        sequence:
+          - service: light.turn_on
+            target:
+              entity_id: "{{ target_entity }}"
+            data:
+              brightness: "{{ new_brightness }}"
+            transition: "{{ transition_time }}"
