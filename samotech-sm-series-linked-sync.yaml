@@ -27,7 +27,7 @@ blueprint:
       - Configurable transition time keeps the mirroring visually smooth
 
     Tested working against:
-      - SM323 (Office) <-> SM325-ZG <-> SM308-S (Office Side) in live HA via ZHA
+      - SM323 <-> SM325-ZG <-> SM308-S in live HA via ZHA
 
     Source: https://www.samotech.co.uk/guides/home-assistant-blueprints/sm-series-linked-sync-group/
 
