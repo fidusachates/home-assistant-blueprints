@@ -109,4 +109,4 @@ action:
               entity_id: "{{ target_entity }}"
             data:
               brightness: "{{ new_brightness }}"
-            transition: "{{ transition_time }}"
+              transition: "{{ transition_time }}"
